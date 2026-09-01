@@ -15,17 +15,18 @@ num_workers = 0
 pretrain = "howto100"
 from_command = False
 
-# TODO: point these at your own pre-extracted-feature / annotation directories.
+# presave_path points at the pretrain root; it must contain
+# <root>_ego/, <root>_exo1/, ..., <root>_exo4/ subdirectories (see dataloader/egoexo4d.py).
 if pretrain == "k400":
-    presave_path = "/path/to/presave/384_ego_rgb_10sample_swin_base_patch244_window877_kinetics400_22k_name_8clip"
+    presave_path = "./data/egoexo4d/k400"
 elif pretrain == "k600":
-    presave_path = "/path/to/presave/384_ego_rgb_10sample_swin_base_patch244_window877_kinetics600_22k_name_8clip"
+    presave_path = "./data/egoexo4d/k600"
 elif pretrain == "howto100":
-    presave_path = "/path/to/presave/384_ego_rgb_10sample_TimeSformer_divST_8x32_224_HowTo100M_name_8clip"
+    presave_path = "./data/egoexo4d/howto100m"
     d_model = 768
 
-train_anno_path = "/path/to/demonstrator_simple_train.json"
-test_anno_path = "/path/to/demonstrator_simple_test.json"
+train_anno_path = "./data/demonstrator_simple_train.json"
+test_anno_path = "./data/demonstrator_simple_test.json"
 
 # --- network ---
 head_type = "simple"

@@ -2,9 +2,10 @@
 Ego-Exo4D feature dataset.
 
 Expects pre-extracted per-clip features saved as .npz files under
-`cfg.presave_path/<split>/`, one file per ego clip, named like
-`..._ego_<id>.npz`. The matching exo-view files are found by string
-substitution (`ego_` -> `exo1_` / `exo2_` / `exo3_` / `exo4_`).
+`cfg.presave_path/<prefix>_<view>/<split>/`, one directory per view
+(view in "ego", "exo1", "exo2", "exo3", "exo4"), where `<prefix>` is
+the last path component of `cfg.presave_path` (e.g. "k400", "k600",
+"howto100m") and all views share the same filenames.
 
 Each .npz stores:
   a: feature tensor, b: proficiency label, c: raw sample/action name
@@ -26,35 +27,29 @@ class EgoExo4d(torch.utils.data.Dataset):
     def __init__(self, args, split="train", anno_path=""):
         self.args = args
         self.split = split
-        self.dataset = glob(os.path.join(self.args.presave_path, split, "*"))
+        self.presave_path = args.presave_path
+        self.prefix = os.path.basename(os.path.normpath(self.presave_path))
+        self.dataset = glob(os.path.join(self.presave_path, f"{self.prefix}_ego", split, "*"))
         self.dataset = sorted(self.dataset, key=lambda x: x.split("_")[-3])
 
     def __len__(self):
         return len(self.dataset)
 
+    def _view_path(self, filename, view):
+        return os.path.join(self.presave_path, f"{self.prefix}_{view}", self.split, filename)
+
     def __getitem__(self, index):
         ego_feat_path = self.dataset[index]
-        exo_feat_path = ego_feat_path.replace("ego_", "exo1_")
-        exo2_feat_path = ego_feat_path.replace("ego_", "exo2_")
-        exo3_feat_path = ego_feat_path.replace("ego_", "exo3_")
-        exo4_feat_path = ego_feat_path.replace("ego_", "exo4_")
+        filename = os.path.basename(ego_feat_path)
+        exo_feat_path = self._view_path(filename, "exo1")
+        exo2_feat_path = self._view_path(filename, "exo2")
+        exo3_feat_path = self._view_path(filename, "exo3")
+        exo4_feat_path = self._view_path(filename, "exo4")
 
         ego_data = np.load(ego_feat_path)
         exo_data = np.load(exo_feat_path)["a"]
         exo2_data = np.load(exo2_feat_path)["a"]
         exo3_data = np.load(exo3_feat_path)["a"]
-
-        # The 4th exo view was pre-extracted with a different backbone/root
-        # per pretrain source, so its path lives under its own presave dir
-        # instead of a simple "ego_"->"exo4_" swap. Point these at your own
-        # feature roots.
-        if self.args.pretrain == "k600":
-            exo4_root = "/path/to/presave/384_exo4_rgb_10sample_swin_base_patch244_window877_kinetics600_22k_name_8clip"
-            exo4_feat_path = glob(f'{exo4_root}/{self.split}/*_{"_".join(exo4_feat_path.split("/")[-1].split("_")[1:])}')[0]
-        elif self.args.pretrain == "howto100":
-            exo4_root = "/path/to/presave/384_ego_rgb_10sample_TimeSformer_divST_8x32_224_HowTo100M_name_8clip"
-            exo4_feat_path = glob(f'{exo4_root}/{self.split}/*_{"_".join(exo4_feat_path.split("/")[-1].split("_")[1:])}')[0]
-        # else (k400): exo4_feat_path already matches via the "ego_"->"exo4_" swap above.
         exo4_data = np.load(exo4_feat_path)["a"]
 
         name_full = str(ego_data["c"])

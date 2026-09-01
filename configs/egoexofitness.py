@@ -16,13 +16,15 @@ num_workers = 0
 pretrain = "howto100"
 from_command = False
 
-# TODO: point these at your own pre-extracted-feature directories.
+# presave_path points at the pretrain root; it must contain
+# <root>_ego/, <root>_exol/, <root>_exom/, <root>_exor/ subdirectories
+# (see dataloader/egoexofitness.py).
 if pretrain == "k400":
-    presave_path = "/path/to/presave/egoexofitness/384_ego_m_rgb_10sample_swin_base_patch244_window877_kinetics400_22k_name_8clip"
+    presave_path = "./data/egoexofitness/k400"
 elif pretrain == "k600":
-    presave_path = "/path/to/presave/egoexofitness/384_ego_m_rgb_10sample_swin_base_patch244_window877_kinetics600_22k_name_8clip"
+    presave_path = "./data/egoexofitness/k600"
 elif pretrain == "howto100":
-    presave_path = "/path/to/presave/egoexofitness/384_ego_m_rgb_10sample_TimeSformer_divST_8x32_224_HowTo100M_name_8clip"
+    presave_path = "./data/egoexofitness/howto100m"
     d_model = 768
 
 # EgoExoFitness dataset builds train/test file lists directly from
