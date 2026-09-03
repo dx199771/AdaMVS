@@ -5,7 +5,10 @@ Expects pre-extracted per-clip features saved as .npz files under
 `cfg.presave_path/<prefix>_<view>/<split>/`, one directory per view
 (view in "ego", "exo1", "exo2", "exo3", "exo4"), where `<prefix>` is
 the last path component of `cfg.presave_path` (e.g. "k400", "k600",
-"howto100m") and all views share the same filenames.
+"howto100m"). Views normally share the same filenames (same leading
+clip id); a few view/pretrain combinations (e.g. k600's exo4) assign
+a different leading id to the same clip, so lookup falls back to
+matching on the id-independent filename suffix.
 
 Each .npz stores:
   a: feature tensor, b: proficiency label, c: raw sample/action name
@@ -36,7 +39,17 @@ class EgoExo4d(torch.utils.data.Dataset):
         return len(self.dataset)
 
     def _view_path(self, filename, view):
-        return os.path.join(self.presave_path, f"{self.prefix}_{view}", self.split, filename)
+        view_dir = os.path.join(self.presave_path, f"{self.prefix}_{view}", self.split)
+        exact = os.path.join(view_dir, filename)
+        if os.path.exists(exact):
+            return exact
+        # Leading clip id doesn't match this view's numbering; fall back to
+        # the id-independent suffix (action/segment/clip) shared across views.
+        suffix = "_".join(filename.split("_")[1:])
+        matches = glob(os.path.join(view_dir, f"*_{suffix}"))
+        if not matches:
+            raise FileNotFoundError(f"no {view} feature file matching {filename} under {view_dir}")
+        return matches[0]
 
     def __getitem__(self, index):
         ego_feat_path = self.dataset[index]
