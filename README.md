@@ -49,7 +49,11 @@ test_anno_path  = "./data/demonstrator_simple_test.json"     # egoexo4d only
 `.npz` files split into `train/` and `test/`. Each `.npz` stores `a` (feature
 tensor), `b` (proficiency label) and `c` (raw sample/action name).
 
-<!-- TODO: add the data download link/instructions here -->
+Pre-extracted features (`data.tar`, matching the `./data/...` layout above)
+are available for download:
+
+- Google Drive: https://drive.google.com/file/d/10abaiIJDZCmlj6lxpq90OGK9SM45IBtZ/view?usp=sharing
+- Baidu Disk: https://pan.baidu.com/s/10HOfPx3DfILw31hhOGG4Ow (提取码: mi52)
 
 ## Training
 
