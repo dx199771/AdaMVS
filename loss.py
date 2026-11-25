@@ -81,8 +81,8 @@ def gradient_blending_loss(cfg, neck, head, ego_vib, exo_vib, ego_data, exo_list
 
     # overfitting-to-generalization gap per branch (clamped at 0: a branch
     # that generalizes *better* than it trains gets no penalty)
-    gap_ego = torch.clamp(loss_ego_train - loss_ego_val, min=0.)
-    gap_exo = torch.clamp(loss_exo_train - loss_exo_val, min=0.)
+    gap_ego = torch.clamp(loss_ego_val - loss_ego_train, min=0.)
+    gap_exo = torch.clamp(loss_exo_val - loss_exo_train, min=0.)
 
     eps = 1e-6
     w_ego = 1 / (gap_ego + eps)
