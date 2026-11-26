@@ -9,10 +9,10 @@ logname = "1"           # -> exp/<logname>.log
 ego_only = False
 exo_only = False
 
-bs_train = 64
+bs_train = 128
 bs_test = 64
 num_workers = 0
-pretrain = "k600"       # "k400" | "k600" | "howto100" -- which backbone feature set to load
+pretrain = "k400"       # "k400" | "k600" | "howto100" -- which backbone feature set to load
 from_command = False    # if True, CLI flags in utils.parse_args() override the fields below
 
 # presave_path points at the pretrain root; it must contain
@@ -46,12 +46,12 @@ pe = "query_pe"
 max_len = 48
 num_head = 2
 num_layers_ego = 2
-num_layers_exo = 2
+num_layers_exo = 1
 weight_layer = 2
 weight_head = 2
-dropout = 0.5
-tau = 0.95           # Gumbel-Softmax temperature (ego/exo gate + exo-view gate)
-topk = 2             # number of exo views kept at train-time top-k gating
+dropout = 0.3
+tau = 0.5            # Gumbel-Softmax temperature (ego/exo gate + exo-view gate)
+topk = 3             # number of exo views kept at train-time top-k gating
 
 loss = "ordinal"     # "ordinal" (CORN) | "cls" (cross entropy)
 
@@ -59,7 +59,13 @@ loss = "ordinal"     # "ordinal" (CORN) | "cls" (cross entropy)
 VIBGB = True          # Gradient-Blending loss (see train.gradient_blending_loss)
 vib_dim = 512
 head_in_dim = d_model
-vib_rate = 0.01        # weight of the VIB KL term
+vib_rate = 0.001       # weight of the VIB KL term
+
+gb_mode = "fixed"      # "fixed" (gap = val - train) | "legacy" (released train - val) | "equal" (0.5/0.5)
+gb_p = 0.25            # exponent p in w = 1 / (gap^p + eps)
+gb_rate = 0.5          # weight of the whole gradient-blending loss
+gb_val_source = "test" # where VIBGB val batches come from: "test" | "holdout" (split off train)
+val_ratio = 0.15       # fraction of train held out when gb_val_source = "holdout"
 
 VIB = True             # VIB bottleneck inside the VIBGB branches
 CVML = False           # InfoNCE ego<->exo contrastive loss
@@ -67,4 +73,4 @@ cvml_rate = 0.01
 
 scheduler_step = 40
 epoch_num = 40
-lr = 1e-5
+lr = 5e-6

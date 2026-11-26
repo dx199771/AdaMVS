@@ -9,7 +9,7 @@ import logging
 import argparse
 
 import numpy as np
-from mmengine.config import Config
+from mmengine.config import Config, DictAction
 
 
 def get_logger(filepath, log_info):
@@ -38,8 +38,9 @@ def init_seed(args):
 def init_gpu(cfg):
     """Restrict visible GPUs to `cfg.multi_gpu` (comma separated device ids,
     e.g. "0,1") and return whether more than one device was requested."""
-    os.environ['CUDA_VISIBLE_DEVICES'] = cfg.multi_gpu
-    multi_gpu = len(cfg.multi_gpu.split(",")) > 1
+    gpus = str(cfg.multi_gpu)  # may arrive as int from --cfg-options
+    os.environ['CUDA_VISIBLE_DEVICES'] = gpus
+    multi_gpu = len(gpus.split(",")) > 1
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     return multi_gpu, device
 
@@ -141,6 +142,11 @@ def parse_args():
         help='Name used for the log file under exp/<logname>.log',
         type=str,
         default="2")
+    parser.add_argument(
+        '--cfg-options',
+        nargs='+',
+        action=DictAction,
+        help='Override config fields, e.g. --cfg-options seed=1 gb_mode=fixed')
     args = parser.parse_args()
     cfg = Config.fromfile(args.config)
 
@@ -158,4 +164,6 @@ def parse_args():
         cfg.tau = args.tau
         cfg.pretrain = args.pretrain
         cfg.logname = args.logname
+    if args.cfg_options:
+        cfg.merge_from_dict(args.cfg_options)
     return cfg

@@ -49,10 +49,13 @@ def gradient_blending_loss(cfg, neck, head, ego_vib, exo_vib, ego_data, exo_list
 
     Runs the ego-only and exo-only branches (other modality zeroed) through
     the neck + a VIB bottleneck, on both the current train batch and a
-    sampled val batch. The gap between train and val loss estimates how
+    sampled val batch. The gap between val and train loss estimates how
     much each branch is overfitting; branches that overfit more get a
     smaller weight `w_*` in the combined loss, and each branch also
-    contributes its VIB KL divergence.
+    contributes its VIB KL divergence. `cfg.gb_mode` selects the weighting
+    ("fixed" | "legacy" | "equal").
+
+    Returns (gb_loss, kl_loss, stats) where stats holds per-step diagnostics.
     """
     # --- val-batch losses, no grad, used only to measure the train/val gap ---
     neck.eval(); head.eval(); ego_vib.eval(); exo_vib.eval()
@@ -79,17 +82,37 @@ def gradient_blending_loss(cfg, neck, head, ego_vib, exo_vib, ego_data, exo_list
     loss_ego_train = corn_loss(head(fusion_train_ego.mean(1)), label, num_classes=cfg.num_classes)
     loss_exo_train = corn_loss(head(fusion_train_exo.mean(1)), label, num_classes=cfg.num_classes)
 
-    # overfitting-to-generalization gap per branch (clamped at 0: a branch
-    # that generalizes *better* than it trains gets no penalty)
-    gap_ego = torch.clamp(loss_ego_val - loss_ego_train, min=0.)
-    gap_exo = torch.clamp(loss_exo_val - loss_exo_train, min=0.)
-
     eps = 1e-6
-    w_ego = 1 / (gap_ego + eps)
-    w_exo = 1 / (gap_exo + eps)
+    gb_mode = cfg.get("gb_mode", "fixed")
+    if gb_mode == "legacy":
+        # Original released behavior, kept for comparison. The gap is
+        # train - val, so an overfitting branch (val > train) is clamped to 0
+        # and gets the *largest* weight.
+        gap_ego = torch.clamp(loss_ego_train - loss_ego_val, min=0.)
+        gap_exo = torch.clamp(loss_exo_train - loss_exo_val, min=0.)
+        w_ego = 1 / (gap_ego + eps)
+        w_exo = 1 / (gap_exo + eps)
+    elif gb_mode == "fixed":
+        # Overfitting gap = val - train (positive when a branch overfits),
+        # clamped at 0. w = 1 / (gap^p + eps): more overfitting -> smaller
+        # weight. Weights are treated as constants (no gradient through them).
+        p = cfg.get("gb_p", 0.5)
+        gap_ego = torch.clamp(loss_ego_val - loss_ego_train.detach(), min=0.)
+        gap_exo = torch.clamp(loss_exo_val - loss_exo_train.detach(), min=0.)
+        w_ego = 1 / (gap_ego ** p + eps)
+        w_exo = 1 / (gap_exo ** p + eps)
+    elif gb_mode == "equal":
+        # Ablation: fixed 0.5 / 0.5 weights.
+        gap_ego = gap_exo = torch.zeros((), device=loss_ego_train.device)
+        w_ego = w_exo = torch.ones((), device=loss_ego_train.device)
+    else:
+        raise ValueError(f"Unknown gb_mode: {gb_mode}")
+
     w_sum = w_ego + w_exo
     w_ego, w_exo = w_ego / w_sum, w_exo / w_sum
 
     gb_loss = w_ego * loss_ego_train + w_exo * loss_exo_train
     kl_loss = kl_ego + kl_exo if cfg.VIB else 0.0
-    return gb_loss, kl_loss
+    stats = {"w_ego": float(w_ego), "gap_ego": float(gap_ego), "gap_exo": float(gap_exo),
+             "both_gaps_zero": float(gap_ego == 0 and gap_exo == 0)}
+    return gb_loss, kl_loss, stats

@@ -13,6 +13,7 @@ loss.py for their implementation:
   - CVML:      InfoNCE contrastive loss between ego and exo query tokens
 """
 import os
+import json
 import wandb
 import torch
 from torch.optim import lr_scheduler
@@ -83,10 +84,16 @@ def main():
     base_logger.info(f"Config:\n{cfg.pretty_text}")
     wandb.init(mode="disabled")  # switch to "online" (and set up your wandb project) to log remotely
 
-    best_val_acc = 0.0
+    best_val_acc = 0.0  # best test accuracy over epochs (what the paper reports)
+    gb_val_source = cfg.get("gb_val_source", "test")
+    eval_splits = ["val", "test"] if "val" in data_loaders else ["test"]
+    best_holdout_acc, test_at_best_holdout = -1.0, None
+    history = []
 
     for epoch in range(cfg.epoch_num):
-        for split in ["train", "test"]:
+        epoch_acc = {}
+        gb_stats = []
+        for split in ["train"] + eval_splits:
             if split == "train":
                 head.train(); neck.train(); ego_vib.train(); exo_vib.train()
                 torch.set_grad_enabled(True)
@@ -95,9 +102,9 @@ def main():
                 torch.set_grad_enabled(False)
 
             total_correct, total_loss, n_batches = 0, 0.0, 0
-            # cycles over the test set so a val batch is always available for
-            # the VIBGB gap loss during training
-            val_iter = cycle(data_loaders["test"])
+            # cycles over the val source so a val batch is always available
+            # for the VIBGB gap loss during training
+            val_iter = cycle(data_loaders["val" if gb_val_source == "holdout" else "test"])
 
             for data_ in tqdm(data_loaders[split], desc=f"epoch {epoch} [{split}]"):
                 ego_data, exo_list, label, onehot = unpack_batch(cfg, data_, device)
@@ -115,11 +122,12 @@ def main():
                 if cfg.VIBGB and split == "train":
                     val_data = next(val_iter)
                     val_ego, val_exo_list, val_label, val_onehot = unpack_batch(cfg, val_data, device)
-                    gb_loss, kl_loss = gradient_blending_loss(
+                    gb_loss, kl_loss, stats = gradient_blending_loss(
                         cfg, neck, head, ego_vib, exo_vib,
                         ego_data, exo_list, label, onehot,
                         val_ego, val_exo_list, val_label, val_onehot)
-                    loss = loss + gb_loss + cfg.vib_rate * kl_loss
+                    gb_stats.append(stats)
+                    loss = loss + cfg.get("gb_rate", 1.0) * gb_loss + cfg.vib_rate * kl_loss
 
                 total_correct += (predicted_labels == label).sum().item()
                 total_loss += loss.item()
@@ -140,11 +148,26 @@ def main():
             print(msg)
             base_logger.info(msg)
 
+            epoch_acc[split] = acc
             if split == "train":
                 scheduler.step()
 
+        if gb_stats:
+            mean = lambda k: sum(s[k] for s in gb_stats) / len(gb_stats)
+            msg = (f"[Epoch {epoch}] GB | w_ego: {mean('w_ego'):.3f} | gap_ego: {mean('gap_ego'):.4f}"
+                   f" | gap_exo: {mean('gap_exo'):.4f} | both_gaps_zero: {mean('both_gaps_zero'):.3f}")
+            print(msg)
+            base_logger.info(msg)
+        if "val" in epoch_acc and epoch_acc["val"] > best_holdout_acc:
+            best_holdout_acc, test_at_best_holdout = epoch_acc["val"], epoch_acc["test"]
+        history.append(epoch_acc)
+
     base_logger.info("Training End")
     base_logger.info(f"Best Acc: {best_val_acc:.4f}")
+    summary = {"best_test_acc": best_val_acc, "last_test_acc": history[-1]["test"],
+               "best_holdout_acc": best_holdout_acc if "val" in data_loaders else None,
+               "test_at_best_holdout": test_at_best_holdout}
+    base_logger.info("SUMMARY " + json.dumps(summary))
 
 
 if __name__ == '__main__':
